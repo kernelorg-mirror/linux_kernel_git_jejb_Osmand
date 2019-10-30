@@ -20,8 +20,6 @@ import net.osmand.plus.api.SQLiteAPI.SQLiteConnection;
 import net.osmand.plus.api.SQLiteAPI.SQLiteCursor;
 import net.osmand.util.Algorithms;
 
-import org.apache.tools.bzip2.CBZip2OutputStream;
-
 import android.app.AlertDialog;
 import android.content.Context;
 
@@ -291,13 +289,9 @@ public class FavouritesDbHelper {
 		try {
 			File f = new File(backupFile.getParentFile(), backupFile.getName());
 			FileOutputStream fout = new FileOutputStream(f);
-			fout.write('B');
-			fout.write('Z');
-			CBZip2OutputStream out = new CBZip2OutputStream(fout);
 			FileInputStream fis = new FileInputStream(externalFile);
-			Algorithms.streamCopy(fis, out);
+			Algorithms.streamCopy(fis, fout);
 			fis.close();
-			out.close();
 			fout.close();
 		} catch (Exception e) {
 			log.warn("Backup failed", e);
