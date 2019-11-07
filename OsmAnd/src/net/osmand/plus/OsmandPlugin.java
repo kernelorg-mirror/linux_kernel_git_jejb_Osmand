@@ -25,6 +25,7 @@ import net.osmand.plus.rastermaps.OsmandRasterMapsPlugin;
 import net.osmand.plus.skimapsplugin.SkiMapsPlugin;
 import net.osmand.plus.srtmplugin.SRTMPlugin;
 import net.osmand.plus.views.OsmandMapTileView;
+import net.osmand.nextcloud.NextcloudMapsPlugin;
 
 import org.apache.commons.logging.Log;
 
@@ -111,6 +112,7 @@ public abstract class OsmandPlugin {
 		allPlugins.add(new AccessibilityPlugin(app));
 		allPlugins.add(new OsmEditingPlugin(app));
 		allPlugins.add(new OsmandDevelopmentPlugin(app));
+		allPlugins.add(new NextcloudMapsPlugin(app));
 		
 		activatePlugins(app, enabledPlugins);
 	}

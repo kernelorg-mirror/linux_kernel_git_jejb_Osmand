@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<resources>
+  <string name="nextcloud_maps_plugin_name">Nextcloud Maps</string>
+  <string name="nextcloud_maps_plugin_description">Nextcloud Maps Plugin synchronizes your favourite points with those in your Nextcloud maps instance</string>
+  <string name="nextcloud_settings">Nextcloud Plugin Settings</string>
+  <string name="nextcloud_url">Base URL</string>
+  <string name="nextcloud_url_desc">Base URL of the Nextcloud server to use</string>
+  <string name="nextcloud_username">User Name</string>
+  <string name="nextcloud_username_desc">The user name to log in with on the Nexcloud server</string>
+  <string name="nextcloud_password">Password</string>
+  <string name="nextcloud_password_desc">Password for the user name</string>
+  <string name="nextcloud_debug">Debugging</string>
+  <string name="nextcloud_debug_desc">Turn on debugging to the android log</string>
+</resources>

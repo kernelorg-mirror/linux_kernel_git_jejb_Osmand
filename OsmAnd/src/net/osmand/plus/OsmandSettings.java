@@ -1961,10 +1961,15 @@ public class OsmandSettings {
 	}
 
 	
+	public final OsmandPreference<String> NEXTCLOUD_URL =
+		new StringPreference("nextcloud_url", "").makeGlobal();
 
-	
+	public final OsmandPreference<String> NEXTCLOUD_USERNAME =
+		new StringPreference("nextcloud_username", "").makeGlobal();
 
-	
+	public final OsmandPreference<String> NEXTCLOUD_PASSWORD =
+		new StringPreference("nextcloud_password", "").makeGlobal();
 
-	
+	public final OsmandPreference<Boolean> NEXTCLOUD_DEBUG =
+		new BooleanPreference("nextcloud_debug", false).makeGlobal();
 }
