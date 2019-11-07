@@ -5,8 +5,10 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.text.Collator;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -22,6 +24,8 @@ import net.osmand.util.Algorithms;
 
 import android.app.AlertDialog;
 import android.content.Context;
+import android.os.Handler;
+import android.os.HandlerThread;
 
 public class FavouritesDbHelper {
 
@@ -29,6 +33,11 @@ public class FavouritesDbHelper {
 		void updateFavourites();
 	}
 
+	public interface FavouritesPlugin {
+		void addFavourite(FavouritePoint p);
+		void deleteFavourite(FavouritePoint p);
+		boolean loadFavourites(FavouritesDbHelper h);
+	}
 
 	private static final org.apache.commons.logging.Log log = PlatformUtil.getLog(FavouritesDbHelper.class);
 	
@@ -43,10 +52,20 @@ public class FavouritesDbHelper {
 	private final OsmandApplication context;
 	protected static final String HIDDEN = "HIDDEN";
 	private static final String DELIMETER = "__";
-	
+	private static FavouritesPlugin plug = null;
+
+	public static void setFavouritesPlugin(FavouritesPlugin p) {
+		plug = p;
+	}
+
+	private HandlerThread handlerThread;
+	private Handler handler;
 
 	public FavouritesDbHelper(OsmandApplication context) {
 		this.context = context;
+		this.handlerThread = new HandlerThread("FavouritesDbThread");
+		this.handlerThread.start();
+		this.handler = new Handler(this.handlerThread.getLooper());
 	}
 	
 	public static class FavoriteGroup {
@@ -55,7 +74,30 @@ public class FavouritesDbHelper {
 		public int color;
 		public List<FavouritePoint> points = new ArrayList<FavouritePoint>();
 	}
-	
+
+	// Interfaces for the plugin to make bulk additions and
+	// individual deletions.  Note sorting is done only in add so
+	// always do delete then add
+	public void addToFavourites(Collection<FavouritePoint> c) {
+		for(FavouritePoint pns : c) {
+			FavoriteGroup group = getOrCreateGroup(pns, 0);
+			// If the group wasn't created, we should
+			// override the remote colour for consistency
+			// (the remote might not even have a colour)
+			pns.setColor(group.color);
+			group.points.add(pns);
+		}
+		sortAll();
+		recalculateCachedFavPoints();
+	}
+
+	public void deleteFromFavourites(FavouritePoint p) {
+		FavoriteGroup group = flatGroups.get(p.getCategory());
+		if (group != null)
+				group.points.remove(p);
+		cachedFavoritePoints.remove(p);
+	}
+
 	public void loadFavorites() {
 		flatGroups.clear();
 		favoriteGroups.clear();
@@ -69,22 +111,36 @@ public class FavouritesDbHelper {
 			}
 			//createDefaultCategories();
 		}
-		Map<String, FavouritePoint> points = new LinkedHashMap<String, FavouritePoint>();
+		final Map<String, FavouritePoint> points = new LinkedHashMap<String, FavouritePoint>();
 		Map<String, FavouritePoint> extPoints = new LinkedHashMap<String, FavouritePoint>();
 		loadGPXFile(internalFile, points);
 		loadGPXFile(getExternalFile(), extPoints);
-		boolean changed = merge(extPoints, points);
-		
-		for(FavouritePoint pns : points.values()) {
-			FavoriteGroup group = getOrCreateGroup(pns, 0);
-			group.points.add(pns);
-		}
-		sortAll();
-		recalculateCachedFavPoints();
-		if(changed) {
-			saveCurrentPointsIntoFile();
-		}
-		favouritesUpdated();
+		final boolean chg = merge(extPoints, points);
+
+		// don't remove these sorts; they ensure the favourite
+		// list is ready for consumption by the FavoriteView
+		// as soon as this API returns regardless of how long
+		// it takes to sync with the plugin.
+		//
+		// If the plugin has to add or remove points, these
+		// sorts will get done again
+		addToFavourites(points.values());
+
+		handler.post(new Runnable() {
+				public void run() {
+					boolean changed = chg;
+
+					if (plug != null) {
+						if (plug.loadFavourites(FavouritesDbHelper.this))
+							changed = true;
+					}
+
+					if(changed) {
+						saveCurrentPointsIntoFile();
+					}
+					favouritesUpdated();
+				}
+			});
 		
 	}
 
@@ -116,42 +172,89 @@ public class FavouritesDbHelper {
 				if (group != null) {
 					group.points.remove(p);
 				}
-				cachedFavoritePoints.remove(p);
+				pluginDeleteFavourite(p);
 			}
 		}
 		if (groupsToDelete != null) {
 			for (FavoriteGroup g : groupsToDelete) {
 				flatGroups.remove(g.name);
 				favoriteGroups.remove(g);
-				cachedFavoritePoints.removeAll(g.points);
+				for (FavouritePoint p: g.points) {
+					pluginDeleteFavourite(p);
+				}
 			}
 		}
-		saveCurrentPointsIntoFile();
+		pluginSaveFile(false);
 	}
 	
 	public boolean deleteFavourite(FavouritePoint p) {
 		return deleteFavourite(p, true);
 	}
 
-	public boolean deleteFavourite(FavouritePoint p, boolean saveImmediately) {
+	public boolean deleteFavourite(final FavouritePoint p, boolean saveImmediately) {
 		if (p != null) {
 			FavoriteGroup group = flatGroups.get(p.getCategory());
 			if (group != null) {
 				group.points.remove(p);
 			}
-			cachedFavoritePoints.remove(p);
+			pluginDeleteFavourite(p);
 		}
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
+			pluginSaveFile(false);
 		}
 		return true;
 	}
-	
+
+	private void pluginEditFavourite(final FavouritePoint p) {
+		if (plug != null) {
+			handler.post(new Runnable() {
+					public void run() {
+						plug.addFavourite(p);
+					}
+				});
+		}
+	}
+
+	private void pluginAddFavourite(final FavouritePoint p) {
+		cachedFavoritePoints.add(p);
+		pluginEditFavourite(p);
+	}
+
+	private void pluginDeleteFavourite(final FavouritePoint p) {
+		cachedFavoritePoints.remove(p);
+		if (plug != null) {
+			handler.post(new Runnable() {
+					public void run() {
+						plug.deleteFavourite(p);
+					}
+				});
+		}
+	}
+
+	// The premise of this is we must update the local file ASAP.
+	// However, the expectation is that the plugin addFavourite
+	// modifies the added favourite, so we must queue a save file
+	// to happen after this as well.
+	private void pluginSaveFile(final boolean sort) {
+		saveCurrentPointsIntoFile();
+		if (sort)
+			sortAll();
+		if (plug != null) {
+			handler.post(new Runnable() {
+					public void run() {
+						saveCurrentPointsIntoFile();
+						if (sort)
+							sortAll();
+					}
+				});
+		}
+	}
+
 	public boolean addFavourite(FavouritePoint p) {
 		return addFavourite(p, true);
 	}
 
-	public boolean addFavourite(FavouritePoint p, boolean saveImmediately) {
+	public boolean addFavourite(final FavouritePoint p, boolean saveImmediately) {
 		if (p.getName().equals("") && flatGroups.containsKey(p.getCategory())) {
 			return true;
 		}
@@ -161,11 +264,10 @@ public class FavouritesDbHelper {
 			p.setVisible(group.visible);
 			p.setColor(group.color);
 			group.points.add(p);
-			cachedFavoritePoints.add(p);
+			pluginAddFavourite(p);
 		}
 		if (saveImmediately) {
-			saveCurrentPointsIntoFile();
-			sortAll();
+			pluginSaveFile(true);
 		}
 
 		return true;
@@ -257,8 +359,8 @@ public class FavouritesDbHelper {
 			p.setColor(pg.color);
 			pg.points.add(p);
 		}
-		sortAll();
-		saveCurrentPointsIntoFile();
+		pluginEditFavourite(p);
+		pluginSaveFile(true);
 		return true;
 	}
 	
@@ -266,7 +368,8 @@ public class FavouritesDbHelper {
 	public boolean editFavourite(FavouritePoint p, double lat, double lon) {
 		p.setLatitude(lat);
 		p.setLongitude(lon);
-		saveCurrentPointsIntoFile();
+		pluginEditFavourite(p);
+		pluginSaveFile(false);
 		return true;
 	}
 	
@@ -410,7 +513,8 @@ public class FavouritesDbHelper {
 	}
 
 	public List<FavouritePoint> getFavouritePoints() {
-		return cachedFavoritePoints;
+		// take a copy to ensure no concurrency problems
+		return new ArrayList<FavouritePoint>(cachedFavoritePoints);
 	}
 	
 
@@ -510,21 +614,29 @@ public class FavouritesDbHelper {
 	}
 	
 	public void editFavouriteGroup(FavoriteGroup group, int color, boolean visible) {
+		boolean changed = false;
+		FavoriteGroup gr = flatGroups.get(group.name);
+
 		if(color != 0 && group.color != color) {
-			FavoriteGroup gr = flatGroups.get(group.name);
+			changed = true;
 			group.color = color;
 			for(FavouritePoint p : gr.points) {
 				p.setColor(color);
 			}	
 		}
 		if(group.visible != visible) {
-			FavoriteGroup gr = flatGroups.get(group.name);
+			changed = true;
 			group.visible = visible;
 			for(FavouritePoint p : gr.points) {
 				p.setVisible(visible);
 			}	
 		}
-		saveCurrentPointsIntoFile();
+		if (changed) {
+			for (FavouritePoint p : gr.points) {
+				pluginEditFavourite(p);
+			}
+			pluginSaveFile(false);
+		}
 	}
 
 	protected void createDefaultCategories() {
