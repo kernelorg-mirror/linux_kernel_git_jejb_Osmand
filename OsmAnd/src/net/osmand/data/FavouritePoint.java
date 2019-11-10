@@ -1,8 +1,14 @@
 package net.osmand.data;
 
 import java.io.Serializable;
+import java.util.Map;
+
+import org.json.JSONObject;
 
 import android.content.Context;
+import android.graphics.Color;
+
+import net.osmand.util.Algorithms;
 
 public class FavouritePoint implements Serializable, LocationPoint {
 	private static final long serialVersionUID = 729654300829771466L;
@@ -11,10 +17,10 @@ public class FavouritePoint implements Serializable, LocationPoint {
 	private String category = "";
 	private double latitude;
 	private double longitude;
-	private int color;
-	private boolean visible = true;
+	private JSONObject extensions;
 
 	public FavouritePoint(){
+		this.extensions = new JSONObject();
 	}
 
 	public FavouritePoint(double latitude, double longitude, String name, String category) {
@@ -25,10 +31,16 @@ public class FavouritePoint implements Serializable, LocationPoint {
 			name = "";
 		}
 		this.name = name;
+		this.extensions = new JSONObject();
 	}
 	
 	public int getColor() {
-		return color;
+		try {
+			String c = extensions.getString("color");
+			return Color.parseColor(c.toUpperCase());
+		} catch (Exception e) {
+			return 0;
+		}
 	}
 	
 	public PointDescription getPointDescription() {
@@ -41,15 +53,29 @@ public class FavouritePoint implements Serializable, LocationPoint {
 	}
 	
 	public void setColor(int color) {
-		this.color = color;
+		try {
+			extensions.put("color", Algorithms.colorToString(color));
+		} catch (Exception e) {
+		}
 	}
 	
 	public boolean isVisible() {
-		return visible;
+		try {
+			extensions.getString("HIDDEN");
+			return false;
+		} catch (Exception e) {
+			return true;
+		}
 	}
 	
 	public void setVisible(boolean visible) {
-		this.visible = visible;
+		try {
+			if (visible)
+				extensions.put("HIDDEN", null);
+			else
+				extensions.put("HIDDEN", "true");
+		} catch (Exception e) {
+		}
 	}
 	
 
@@ -96,7 +122,34 @@ public class FavouritePoint implements Serializable, LocationPoint {
 	public void setDescription(String description) {
 		this.description = description;
 	}
-	
+
+	public String getExtension(String ext) {
+		try {
+			return this.extensions.getString(ext);
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+	public void setExtension(String ext, String value) {
+		try {
+			this.extensions.put(ext, value);
+		} catch (Exception e) {
+		}
+	}
+
+	public void setExtensions(Map e) {
+		this.extensions = new JSONObject(e);
+	}
+
+	public void setExtensions(JSONObject jo) {
+		this.extensions = jo;
+	}
+
+	public JSONObject getExtensions() {
+		return this.extensions;
+	}
+
 	@Override
 	public String toString() {
 		return "Favourite " + getName(); //$NON-NLS-1$

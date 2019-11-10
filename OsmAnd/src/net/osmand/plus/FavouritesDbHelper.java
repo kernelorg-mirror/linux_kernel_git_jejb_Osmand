@@ -384,18 +384,18 @@ public class FavouritesDbHelper {
 		GPXFile gpx = new GPXFile();
 		for (FavouritePoint p : favoritePoints) {
 			WptPt pt = new WptPt();
+			Map<String, String> extensions = pt.getExtensionsToWrite();
 			pt.lat = p.getLatitude();
 			pt.lon = p.getLongitude();
-			if(!p.isVisible()) {
-				pt.getExtensionsToWrite().put(HIDDEN, "true");
-			}
-			if(p.getColor() != 0) {
-				pt.setColor(p.getColor());
-			}
 			pt.name = p.getName();
 			pt.desc = p.getDescription();
 			if (p.getCategory().length() > 0)
 				pt.category = p.getCategory();
+			Iterator<String> i = p.getExtensions().keys();
+			while (i.hasNext()) {
+				String key = i.next();
+				extensions.put(key, p.getExtension(key));
+			}
 			gpx.points.add(pt);
 		}
 		return gpx;
@@ -503,8 +503,7 @@ public class FavouritesDbHelper {
 			}
 			FavouritePoint fp = new FavouritePoint(p.lat, p.lon, name, categoryName);
 			fp.setDescription(p.desc);
-			fp.setColor(p.getColor(0));
-			fp.setVisible(!p.getExtensionsToRead().containsKey(HIDDEN));
+			fp.setExtensions(p.getExtensionsToRead());
 			points.put(getKey(fp), fp);
 		}
 		return null;
