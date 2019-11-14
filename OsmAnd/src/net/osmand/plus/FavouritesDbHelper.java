@@ -115,7 +115,7 @@ public class FavouritesDbHelper {
 		Map<String, FavouritePoint> extPoints = new LinkedHashMap<String, FavouritePoint>();
 		loadGPXFile(internalFile, points);
 		loadGPXFile(getExternalFile(), extPoints);
-		final boolean chg = merge(extPoints, points);
+		boolean changed = merge(extPoints, points);
 
 		// don't remove these sorts; they ensure the favourite
 		// list is ready for consumption by the FavoriteView
@@ -125,6 +125,16 @@ public class FavouritesDbHelper {
 		// If the plugin has to add or remove points, these
 		// sorts will get done again
 		addToFavourites(points.values());
+
+		String time = Long.toString(System.currentTimeMillis()/1000);
+		for (FavouritePoint p: cachedFavoritePoints) {
+			if (p.getExtension("modified") == null) {
+				p.setExtension("modified", time);
+				changed = true;
+			}
+		}
+
+		final boolean chg = changed;
 
 		handler.post(new Runnable() {
 				public void run() {
@@ -206,6 +216,8 @@ public class FavouritesDbHelper {
 	}
 
 	private void pluginEditFavourite(final FavouritePoint p) {
+		String time = Long.toString(System.currentTimeMillis()/1000);
+		p.setExtension("modified", time);
 		if (plug != null) {
 			handler.post(new Runnable() {
 					public void run() {
