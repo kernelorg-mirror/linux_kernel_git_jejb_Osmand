@@ -20,6 +20,28 @@ day, so once that sync is complete only local points are kept in sync;
 any remote additions won't be reflected until the app is restarted
 (TODO: add a periodic sync?).
 
+Timestamp
+---------
+
+We add a local timestamp in an <extensions> <modified> tag on the
+local so we can compare modification times to determine if a point
+should be updated either locally or remotely based on the newest
+timestamp.  We're assuming that the local and remote clocks are
+synchronized to the second.
+
+Nextcloud currently has no ability to modify the timestamp, so a local
+point is added with the local timestamp but this would be updated to
+the remote timestamp when the remote point is added (meaning both
+timestamps become the same).  This causes two saves of the gpx file:
+the first when the point is created with the local timestamp and the
+second when the remote gives us its timestamp and we update the local
+file with it.
+
+Rename detection is done via the stored id ... all points in the local
+that are on the remote should have one.  For points that don't have an
+id (either created while the remote was offline or which got some
+error trying to update the remote), we do reconciliation by name.
+
 TODOS
 =====
 
@@ -27,20 +49,6 @@ Periodic Sync
 -------------
 
 Simply queue delayed sync work which does a plugin.loadFavourites()
-
-Timestamp
----------
-
-Add a local timestamp in an <extensions> <modified> tag on the local
-so we can compare modification times to determine if a point should be
-updated either locally or remotely based on the newest timestamp.
-We're assuming that the local and remote clocks are synchronized to
-the second.
-
-Nextcloud currently has no ability to modify the timestamp, so a local
-point will be added with the local timestamp but this would be updated
-to the remote timestamp when the remote point is added (meaning both
-timestamps become the same).
 
 Group Operations
 ----------------

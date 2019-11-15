@@ -184,8 +184,9 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 			method = "PUT";
 			debug("edit Favourite[" + id + "]: " + name);
 		}
-		// strip id from saved extensions
+		// strip id and modified from saved extensions
 		p.setExtension(IDstr, null);
+		p.setExtension("modified", null);
 		try {
 			JSONObject jo = new JSONObject();
 			String reply;
@@ -207,6 +208,10 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 			id = jo.getString("id");
 
 			p.setExtension(IDstr, id);
+			// the remote modification time is immutable,
+			// so update our local modification time with
+			// whatever the remote returned.
+			p.setExtension("modified", jo.getString("date_modified"));
 			debug("received " + name + " [" + id + "]");
 		} catch (Exception e) {
 			log.error(e.getMessage(), e);
@@ -250,16 +255,20 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 			return false;
 		}
 
-		Map<String, FavouritePoint> m =
+		Map<String, FavouritePoint> mName =
+			new HashMap<String, FavouritePoint>();
+		Map<String, FavouritePoint> mId =
 			new HashMap<String, FavouritePoint>();
 
 		for (int i = 0; i < jarr.length(); i++) {
 			try {
 				JSONObject jo = jarr.getJSONObject(i);
+				String id = jo.getString("id");
 				double lat = jo.getDouble("lat");
 				double lng = jo.getDouble("lng");
 				String name = jo.getString("name");
 				String category = jo.getString("category");
+				String modified = jo.getString("date_modified");
 				// the Favorites category is blank on OsmAnd
 				if (category.equals(FAVOURITES))
 					category = "";
@@ -271,8 +280,10 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 				if (extensions != null)
 					p.setExtensions(extensions);
 
-				p.setExtension(IDstr, jo.getString("id"));
-				m.put(name, p);
+				p.setExtension(IDstr, id);
+				p.setExtension("modified", modified);
+				mName.put(name, p);
+				mId.put(id, p);
 			} catch (JSONException e) {
 				log.error(e.getMessage(), e);
 			}
@@ -284,15 +295,25 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 
 		// First is the extra list: any points left in here
 		// after the iteration exist remotely but not locally
-		Map<String,FavouritePoint> extra = new HashMap<String,FavouritePoint>(m);
+		Map<String,FavouritePoint> extra = new HashMap<String,FavouritePoint>(mId);
 		boolean changed = false;
 		for (FavouritePoint p: l) {
 			String name = p.getName();
 			String id = p.getExtension(IDstr);
-			FavouritePoint rp = m.get(name);
+			FavouritePoint rp;
+
+			// if we've seen a point before, we can map it
+			// by its id, which is stable, so do this to
+			// catch renames.  If we don't have an id, we
+			// have to map the point by its name
+			if (id == null)
+				rp = mName.get(name);
+			else
+				rp = mId.get(id);
 
 			// deletion case: point doesn't exist remotely
 			if (rp == null) {
+				changed = true;
 				// If point has an "id" extension it
 				// once existed remotely, so delete it
 				// otherwise assume it was locally
@@ -301,18 +322,39 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 					addFavourite(p);
 				} else {
 					debug("loadFavourites, delete: " + name + " [" + id +"]");
-					changed = true;
 					h.deleteFromFavourites(p);
+					extra.remove(id);
 				}
-			} else {
-				debug("Found Existing: " + name + " [" + id + "]");
-				extra.remove(name);
-				// point must have been saved to remote
-				// but not updated locally
-				if (p.getExtension(IDstr) == null) {
-					p.setExtensions(rp.getExtensions());
-					changed = true;
-				}
+				continue;
+			}
+
+			// point must have been saved to remote
+			// but not updated locally, so use the remote id
+			if (p.getExtension(IDstr) == null) {
+				id = rp.getExtension(IDstr);
+				p.setExtension(IDstr, id);
+				changed = true;
+			}
+
+			debug("Found Existing: " + name + " [" + id + "]");
+			extra.remove(id);
+
+			long modified = Long.parseLong(p.getExtension("modified"));
+			long rmodified = Long.parseLong(rp.getExtension("modified"));
+			// the default should be they're equal, but if
+			// not determine which one is taken as
+			// defintive
+			if (rmodified > modified) {
+				debug("replacing local with remote for: " + name);
+				p.setLongitude(rp.getLongitude());
+				p.setLatitude(rp.getLatitude());
+				p.setDescription(rp.getDescription());
+				p.setCategory(rp.getCategory());
+				p.setExtensions(rp.getExtensions());
+				p.setName(rp.getName());
+			} else if (modified > rmodified) {
+				debug("replacing remote with local for: " + name);
+				addFavourite(p);
 			}
 		}
 		if (!extra.isEmpty()) {
