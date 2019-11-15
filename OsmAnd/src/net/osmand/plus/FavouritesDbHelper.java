@@ -37,6 +37,7 @@ public class FavouritesDbHelper {
 		void addFavourite(FavouritePoint p);
 		void deleteFavourite(FavouritePoint p);
 		boolean loadFavourites(FavouritesDbHelper h);
+		long getSyncIntervalMillis();
 	}
 
 	private static final org.apache.commons.logging.Log log = PlatformUtil.getLog(FavouritesDbHelper.class);
@@ -54,8 +55,15 @@ public class FavouritesDbHelper {
 	private static final String DELIMETER = "__";
 	private static FavouritesPlugin plug = null;
 
-	public static void setFavouritesPlugin(FavouritesPlugin p) {
+	public void setFavouritesPlugin(FavouritesPlugin p) {
 		plug = p;
+		if (p == null)
+			handler.removeCallbacks(syncWork);
+		else if (initialized)
+			pluginStartSync();
+		// if initialized isn't set, then loadFavourites will
+		// take care of starting the sync after the favourites
+		// are loaded and sorted from files
 	}
 
 	private HandlerThread handlerThread;
@@ -98,6 +106,11 @@ public class FavouritesDbHelper {
 		cachedFavoritePoints.remove(p);
 	}
 
+	// This flag tells us if we've done the initial load.  Any
+	// remote sync plugin can't start until *after* this point
+	// because our points cache is empty
+	private boolean initialized = false;
+
 	public void loadFavorites() {
 		flatGroups.clear();
 		favoriteGroups.clear();
@@ -117,13 +130,6 @@ public class FavouritesDbHelper {
 		loadGPXFile(getExternalFile(), extPoints);
 		boolean changed = merge(extPoints, points);
 
-		// don't remove these sorts; they ensure the favourite
-		// list is ready for consumption by the FavoriteView
-		// as soon as this API returns regardless of how long
-		// it takes to sync with the plugin.
-		//
-		// If the plugin has to add or remove points, these
-		// sorts will get done again
 		addToFavourites(points.values());
 
 		String time = Long.toString(System.currentTimeMillis()/1000);
@@ -134,24 +140,14 @@ public class FavouritesDbHelper {
 			}
 		}
 
-		final boolean chg = changed;
+		// at this point the cachedFavouritePoints is ready to go
+		initialized = true;
 
-		handler.post(new Runnable() {
-				public void run() {
-					boolean changed = chg;
+		if (changed)
+			saveCurrentPointsIntoFile();
 
-					if (plug != null) {
-						if (plug.loadFavourites(FavouritesDbHelper.this))
-							changed = true;
-					}
-
-					if(changed) {
-						saveCurrentPointsIntoFile();
-					}
-					favouritesUpdated();
-				}
-			});
-		
+		favouritesUpdated();
+		pluginStartSync();
 	}
 
 	private void favouritesUpdated(){
@@ -241,6 +237,30 @@ public class FavouritesDbHelper {
 					}
 				});
 		}
+	}
+
+	private Runnable syncWork = new Runnable() {
+			public void run() {
+				boolean changed = false;
+
+				if (plug != null)
+					changed = plug.loadFavourites(FavouritesDbHelper.this);
+
+				if(changed)
+					saveCurrentPointsIntoFile();
+
+				favouritesUpdated();
+				if (plug != null) {
+					long delayMillis = plug.getSyncIntervalMillis();
+					handler.postDelayed(this, delayMillis);
+				}
+			}
+		};
+
+	// public to allow the plugin to call it on being enabled
+	public void pluginStartSync() {
+		if (plug != null)
+			handler.post(syncWork);
 	}
 
 	// The premise of this is we must update the local file ASAP.
