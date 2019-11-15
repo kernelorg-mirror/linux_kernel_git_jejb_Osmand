@@ -65,6 +65,25 @@ public class NextcloudMapsSettingsActivity extends SettingsBaseActivity {
 						InputType.TYPE_TEXT_VARIATION_PASSWORD);
 		ps.addPreference(pref);
 
+		pref = createEditTextPreference(settings.NEXTCLOUD_SYNC_INTERVAL,
+						R.string.nextcloud_sync_interval,
+						// Set below so this is ignored
+						R.string.nextcloud_sync_interval);
+		pref.getEditText().setInputType(InputType.TYPE_CLASS_NUMBER);
+		str = settings.NEXTCLOUD_SYNC_INTERVAL.get();
+		pref.setSummary(str);
+		pref.setOnPreferenceChangeListener(new OnPreferenceChangeListener() {
+				public boolean onPreferenceChange(Preference p,  Object o) {
+					String str = (String)o;
+					if (!str.isEmpty())
+						p.setSummary(str);
+					else
+						p.setSummary("0");
+					return NextcloudMapsSettingsActivity.this.onPreferenceChange(p, o);
+				}
+			});
+		ps.addPreference(pref);
+
 		CheckBoxPreference dbg =
 			createCheckBoxPreference(settings.NEXTCLOUD_DEBUG,
 						 R.string.nextcloud_debug,

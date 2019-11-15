@@ -42,13 +42,28 @@ that are on the remote should have one.  For points that don't have an
 id (either created while the remote was offline or which got some
 error trying to update the remote), we do reconciliation by name.
 
-TODOS
-=====
-
 Periodic Sync
 -------------
 
-Simply queue delayed sync work which does a plugin.loadFavourites()
+The plugin is updated to ask for a sync interval and supply it through
+a new plugin API getSyncIntervalMillis().
+
+Sync is now kicked off whenever the plugin is set enabled.  However,
+there is a problem with enablement on start of day since the
+cachedFavorites list is often not initialized, so the
+FavouritesDbHelper has a new getInitialized() callback which is only
+set to true when the first load of the cachedFavourites list is
+finished.
+
+Sync periodicity is achieved by queueing a syncWork job which requeues
+itself with a delay of the sync interval after completion provided the
+plugin is still active.  When the plugin is set inactive, the
+FavouritesDbHelper removes the syncWork job and it gets restarted when
+the pluging is set active.  This means you can trigger a resync simply
+by enabling and disabling the plugin.
+
+TODOS
+=====
 
 Group Operations
 ----------------

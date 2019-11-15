@@ -11,4 +11,5 @@
   <string name="nextcloud_password_desc">Password for the user name</string>
   <string name="nextcloud_debug">Debugging</string>
   <string name="nextcloud_debug_desc">Turn on debugging to the android log</string>
+  <string name="nextcloud_sync_interval">Synchronization Interval (seconds)</string>
 </resources>

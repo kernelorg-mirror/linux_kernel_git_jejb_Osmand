@@ -1972,4 +1972,7 @@ public class OsmandSettings {
 
 	public final OsmandPreference<Boolean> NEXTCLOUD_DEBUG =
 		new BooleanPreference("nextcloud_debug", false).makeGlobal();
+
+	public final OsmandPreference<String> NEXTCLOUD_SYNC_INTERVAL =
+		new StringPreference("nextcloud_sync_interval", "3600").makeGlobal();
 }

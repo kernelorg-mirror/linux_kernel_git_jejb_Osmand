@@ -45,6 +45,7 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 	private String username;
 	private String password;
 	private boolean debug = false;
+	private long syncIntervalMillis;
 
 	// Our real private data
 	final private String FAVOURITES;
@@ -93,10 +94,13 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 	public void setActive(boolean active) {
 		super.setActive(active);
 
+		FavouritesDbHelper fh = app.getFavorites();
+		log.info("set active = " + active);
+
 		if (active)
-			FavouritesDbHelper.setFavouritesPlugin(this);
+			fh.setFavouritesPlugin(this);
 		else
-			FavouritesDbHelper.setFavouritesPlugin(null);
+			fh.setFavouritesPlugin(null);
 	}
 
 	private void settingsUpdate() {
@@ -105,6 +109,7 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 		username = settings.NEXTCLOUD_USERNAME.get();
 		password = settings.NEXTCLOUD_PASSWORD.get();
 		debug = settings.NEXTCLOUD_DEBUG.get();
+		syncIntervalMillis = Integer.parseInt(settings.NEXTCLOUD_SYNC_INTERVAL.get()) * 1000;
 		if (prev == false && debug == true)
 			log.info("Osmand Nextcloud plugin enabling debugging");
 		else if (prev == true && debug == false)
@@ -120,6 +125,7 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 		settings.NEXTCLOUD_USERNAME.addListener(this);
 		settings.NEXTCLOUD_PASSWORD.addListener(this);
 		settings.NEXTCLOUD_DEBUG.addListener(this);
+		settings.NEXTCLOUD_SYNC_INTERVAL.addListener(this);
 	}
 
 	public void stateChanged(Object change) {
@@ -168,6 +174,10 @@ public class NextcloudMapsPlugin extends OsmandPlugin
 		} finally {
 			c.disconnect();
 		}
+	}
+
+	public long getSyncIntervalMillis() {
+		return syncIntervalMillis;
 	}
 
 	public void addFavourite(FavouritePoint p) {
